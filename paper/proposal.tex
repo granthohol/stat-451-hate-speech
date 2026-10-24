@@ -1,0 +1,125 @@
+\documentclass{article}
+
+\usepackage{arxiv}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage[round]{natbib}
+\usepackage{doi}
+
+\title{Has Political Hate Grown on Reddit?\\ Classifying and Measuring Group-Directed Abuse, 2015--2024}
+
+\date{}
+
+% TODO: fill in group members
+\author{
+  Grant Hohol, Mia Teng, Drew Barkman, JT Vespalec, Wesley Erpelding \\
+  Department of Statistics, University of Wisconsin--Madison \\
+}
+
+\renewcommand{\headeright}{Project Proposal}
+\renewcommand{\undertitle}{Stat 451 Project Proposal}
+\renewcommand{\shorttitle}{Group-Directed Abuse on Reddit}
+
+\begin{document}
+\maketitle
+
+% ---------------------------------------------------------------
+\section{Introduction}
+
+Through the use of social media platforms, users all over the world have direct access to transmitting messages instantaneously to an increasingly large audience.
+However, as access to such platforms becomes more widely accessible, the amount of hate speech also increases.
+In this current era of big data, it is both time-consuming and difficult to manually process and classify massive amounts of textual data \citep{mullah2021}.
+In an attempt to expedite this analysis, machine learning methods have been applied broadly in an attempt to accurately and precisely classify text.
+Various interpretations of hate speech are widely available, but a prevailing pattern is the utilization of language that either targets or encourages violence against a specific group characterized by distinct attributes \citep{rawat2024}.
+The dataset being utilized in this project also uses this pattern, separating abuse directed at a group, whether an identity group or a political affiliation, from abuse directed at an individual and from neutral speech \citep{vidgen2021}.
+In a study by \citet{miok2022}, a Bayesian approach was applied, addressing the challenge of multilingual hate speech detection.
+On the other hand, in a study by \citet{chiril2022}, a multifaceted approach was used, moving beyond binary classification and towards a more detailed representation, finding that multi-task models perform better than single-task models.
+
+Throughout the last decade, hate speech detection research has become much more prominent, but it is still riddled with limitations.
+These include, but are not limited to, context-dependency, bias, and multilingualism \citep{gandhi2024}.
+In an attempt to address the first of these limitations, context-dependency, as well as design a model that accurately predicts whether or not speech is classified as `hate speech', we will use a multifaceted approach, similar to the study conducted by Chiril et al., distinguishing abuse by its target rather than using a single binary label, and training on labels assigned with the surrounding conversation in view.
+
+Whether the amount of hate speech has in fact increased is itself an empirical question.
+We apply our classifier to Reddit comments from 2015 to 2024 to answer two questions.
+First, has \emph{group-directed abuse}, meaning abuse aimed at identity groups or political affiliations, grown in political subreddits over this period?
+Second, has it grown more in political subreddits than in non-political ones?
+
+% ---------------------------------------------------------------
+\section{Methods}
+
+\paragraph{Classification.} We collapse the training labels into three classes: group-directed abuse (identity- or affiliation-directed), person-directed abuse, and neutral.
+Comments are lowercased, URLs and usernames are replaced with placeholder tokens, and each comment is represented with TF--IDF features over word $n$-grams.
+We compare three linear classifiers covered in the course: multinomial naive Bayes, a generative baseline that models word frequencies within each class; multinomial (softmax) logistic regression with $L_2$ regularization, which models class probabilities directly; and a linear support vector machine, which finds the maximum-margin separating hyperplane.
+Logistic regression and the SVM use class weights to offset class imbalance.
+Hyperparameters (regularization strength, smoothing, $n$-gram range) are tuned on the dataset's development split, and each model is evaluated once on the held-out test split.
+Because group-directed abuse is the minority class of interest, we report per-class precision, recall, and F1, macro-F1, and confusion matrices rather than accuracy.
+
+\paragraph{Measuring prevalence.} We apply the best model, chosen by development-set macro-F1, to a large sample of Reddit comments and compute, for each subreddit and month, the share $\hat q$ flagged as group-directed abuse.
+This raw share is biased: the training data over-represents abuse, and the classifier makes errors.
+We therefore use adjusted classify-and-count \citep{forman2008}.
+Let $p$ be the true share of comments that are group-directed abuse, the true positive rate $\mathrm{TPR} = P(\text{flagged} \mid \text{abusive})$ be the fraction of abusive comments the model catches, and the false positive rate $\mathrm{FPR} = P(\text{flagged} \mid \text{not abusive})$ be the fraction of other comments it wrongly flags.
+Every flagged comment is either a correctly caught abusive comment or a false alarm, so the expected flagged share is $q = p\,\mathrm{TPR} + (1-p)\,\mathrm{FPR}$.
+Solving for $p$ gives
+\[
+  \hat p = \frac{\hat q - \widehat{\mathrm{FPR}}}{\widehat{\mathrm{TPR}} - \widehat{\mathrm{FPR}}},
+\]
+clipped to $[0,1]$.
+The numerator removes the expected false alarms, and the denominator rescales for abusive comments the model misses.
+Because TPR and FPR are conditional on the true class, they do not depend on how common abuse is, so this correction holds even though abuse is far rarer on Reddit than in the training data.
+We estimate both rates on a hand-labeled sample of about 300 Reddit comments drawn across subreddits and years, stratified by the model's prediction so that flagged comments are well represented.
+Error rates that stay stable over time cancel out of differences, so we treat changes over time, rather than absolute levels, as our primary result.
+
+\paragraph{Trend comparison.} We average monthly prevalence within a political group and a control group (Section~\ref{sec:data}) and fit
+\[
+  p_{g,t} = \beta_0 + \beta_1 t + \beta_2 \,\mathrm{Pol}_g + \beta_3 \,(t \times \mathrm{Pol}_g) + \varepsilon_{g,t},
+\]
+where $t$ is time and $\mathrm{Pol}_g$ indicates the political group.
+The political trend is $\beta_1 + \beta_3$ (question 1), and $\beta_3$ measures how much faster abuse grew in political subreddits than in control subreddits (question 2).
+We form 95\% confidence intervals by bootstrapping: we resample comments within each subreddit-month and refit.
+
+% ---------------------------------------------------------------
+\section{Dataset}
+\label{sec:data}
+
+\paragraph{Training: Contextual Abuse Dataset (CAD).} CAD \citep{vidgen2021} contains 26,550 Reddit entries (posts and comments) collected between February and July 2019 from 16 subreddits chosen for above-average abuse.
+Annotators saw each entry in the context of its thread.
+Primary labels are neutral (79.8\%), identity-directed abuse (9.9\%), affiliation-directed abuse (5.0\%), person-directed abuse (4.0\%), counter speech (0.8\%), and non-hateful slurs (0.5\%).
+After the authors' cleaning, 23,417 entries are split into train, development, and test sets, with each thread kept within one split.
+Under our mapping, about 15\% of entries are group-directed abuse.
+CAD is well suited to this project because it comes from the same platform we analyze and distinguishes abuse by target.
+It is released under CC BY 4.0.
+
+\paragraph{Application: Reddit comment archive.} We use Reddit comments from Arctic Shift (\url{https://github.com/ArthurHeitmann/arctic_shift}), a public archive that reprocesses the historical Pushshift dumps \citep{baumgartner2020} and continues collection after Pushshift's shutdown.
+Comments can be retrieved per subreddit and date range.
+We analyze seven subreddits from January 2015 to December 2024, a span that covers three U.S. presidential and two midterm elections:
+\begin{itemize}
+  \item \textbf{Political:} r/politics, r/Conservative, r/news, r/worldnews.
+  \item \textbf{Control:} r/AskReddit, r/movies, r/todayilearned.
+\end{itemize}
+For each subreddit-month, we pick 100 random start times and retrieve the next 100 comments after each, about 10,000 comments per subreddit-month.
+Because random start times over-sample quiet hours, each comment is weighted by the inverse of its window's time span when computing monthly averages.
+This yields up to about 8.4 million comments in total.
+We drop deleted and removed comments, bot accounts, and non-English text.
+Known limitations include moderator-removed comments that were never captured, possible changes in data collection after Pushshift lost API access in 2023, and the gap between CAD's 2019 edgy-subreddit text and mainstream subreddits.
+We use the data for research only and will not redistribute raw comments.
+
+% ---------------------------------------------------------------
+\section{Expected Outcomes}
+
+
+% ---------------------------------------------------------------
+\section{Resources}
+
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
