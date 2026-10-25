@@ -23,8 +23,18 @@ which is proportional to how busy the subreddit was at that time. Weighted
 averages over comments then estimate the true monthly average. Use these
 weights when computing monthly prevalence.
 
-Deleted/removed comments and known bots are dropped AFTER the window's span is
-measured, so the weights still reflect total activity.
+Deleted/removed comments, known bots, and non-English comments are dropped
+AFTER the window's span is measured, so the weights still reflect total activity.
+
+Language filter
+---------------
+Language detectors often misread short English comments ("Nice.", "Yes.",
+"China?") as other languages. So we strip links, quoted text, and u/ r/
+mentions, skip comments with fewer than 20 letters, and only drop a comment if
+py3langid is at least 90% sure it is not English. On ~1,600 test comments this
+dropped none of the English ones and most of the French, German, and Portuguese
+ones. It errs toward keeping text, since dropping English abuse would bias
+prevalence down while a kept non-English comment is just unlikely to be flagged.
 
 Output: one Parquet file per subreddit-month at
     data/raw/reddit/<subreddit>/<YYYY-MM>.parquet
@@ -42,12 +52,14 @@ about 12,000 requests (roughly 2-3 hours).
 
 import argparse
 import random
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 import requests
+from py3langid.langid import MODEL_FILE, LanguageIdentifier
 
 API_URL = "https://arctic-shift.photon-reddit.com/api/comments/search"
 FIELDS = "id,author,created_utc,body,subreddit,link_id,parent_id,score"
@@ -55,6 +67,22 @@ DEFAULT_OUT = Path(__file__).resolve().parents[1] / "data" / "raw" / "reddit"
 
 REMOVED_BODIES = {"[deleted]", "[removed]", ""}
 BOT_AUTHORS = {"AutoModerator", "[deleted]"}
+
+LANG_ID = LanguageIdentifier.from_model_file(MODEL_FILE, norm_probs=True)
+LANG_MIN_LETTERS = 20
+LANG_MIN_PROB = 0.9
+# Markdown links keep their text; bare URLs, u/ r/ mentions, and HTML entities go.
+MARKUP = re.compile(r"\[([^\]]*)\]\([^)]*\)|https?://\S+|www\.\S+|\b[ur]/\w+|&\w+;")
+QUOTE = re.compile(r"^\s*(>|&gt;).*$", re.M)
+
+
+def is_non_english(body: str) -> bool:
+    """True if a comment is long enough to judge and confidently not English."""
+    text = MARKUP.sub(r"\1", QUOTE.sub("", body))
+    if sum(ch.isalpha() for ch in text) < LANG_MIN_LETTERS:
+        return False
+    lang, prob = LANG_ID.classify(text)
+    return lang != "en" and prob >= LANG_MIN_PROB
 
 
 def month_bounds(year: int, month: int) -> tuple[int, int]:
@@ -134,9 +162,10 @@ def sample_month(subreddit: str, year: int, month: int, windows: int, per_window
     df["created_utc"] = df["created_utc"].astype(int)
     # Overlapping windows can return the same comment twice; keep the first copy.
     df = df.drop_duplicates(subset="id", keep="first")
-    # Drop deleted/removed comments and bots after spans are measured.
+    # Drop deleted/removed comments, bots, and non-English text after spans are measured.
     df = df[~df["body"].fillna("").str.strip().isin(REMOVED_BODIES)]
     df = df[~df["author"].isin(BOT_AUTHORS)]
+    df = df[~df["body"].map(is_non_english)]
     df["year_month"] = f"{year:04d}-{month:02d}"
     return df.reset_index(drop=True)
 
