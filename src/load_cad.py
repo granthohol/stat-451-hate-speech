@@ -9,6 +9,9 @@ data/raw/cad/:
     cad_v1_1_dev.tsv
     cad_v1_1_test.tsv
 
+CAD calls its validation split "dev" (hence cad_v1_1_dev.tsv). We call it
+"validation" everywhere in our code.
+
 Each split file has three tab-separated columns: id, text, labels. `labels` is a
 comma-separated list because an entry can have more than one primary label.
 
@@ -32,7 +35,9 @@ from pathlib import Path
 import pandas as pd
 
 DEFAULT_DIR = Path(__file__).resolve().parents[1] / "data" / "raw" / "cad"
-SPLITS = ("train", "dev", "test")
+SPLITS = ("train", "validation", "test")
+# Our split name -> the name CAD uses in its file names.
+CAD_FILE_NAMES = {"train": "train", "validation": "dev", "test": "test"}
 
 GROUP_LABELS = {"IdentityDirectedAbuse", "AffiliationDirectedAbuse"}
 PERSON_LABELS = {"PersonDirectedAbuse"}
@@ -62,7 +67,7 @@ def clean_text(text: str) -> str:
 
 def load_split(split: str, data_dir: Path = DEFAULT_DIR, version: str = "v1_1") -> pd.DataFrame:
     """Load one CAD split as a DataFrame with columns: id, text, cad_labels, label."""
-    path = Path(data_dir) / f"cad_{version}_{split}.tsv"
+    path = Path(data_dir) / f"cad_{version}_{CAD_FILE_NAMES[split]}.tsv"
     if not path.exists():
         raise FileNotFoundError(
             f"{path} not found. Download CAD from https://zenodo.org/records/4881008 "
@@ -78,7 +83,7 @@ def load_split(split: str, data_dir: Path = DEFAULT_DIR, version: str = "v1_1") 
 
 
 def load_cad(data_dir: Path = DEFAULT_DIR, version: str = "v1_1") -> dict:
-    """Load all three splits. Returns {"train": df, "dev": df, "test": df}."""
+    """Load all three splits. Returns {"train": df, "validation": df, "test": df}."""
     return {s: load_split(s, data_dir, version) for s in SPLITS}
 
 
@@ -91,7 +96,7 @@ def main():
     for name, df in splits.items():
         counts = df["label"].value_counts().reindex(CLASSES, fill_value=0)
         shares = (counts / len(df)).round(3)
-        print(f"{name:5s}  n={len(df):6d}  " + "  ".join(f"{c}={counts[c]} ({shares[c]:.1%})" for c in CLASSES))
+        print(f"{name:10s}  n={len(df):6d}  " + "  ".join(f"{c}={counts[c]} ({shares[c]:.1%})" for c in CLASSES))
 
 
 if __name__ == "__main__":

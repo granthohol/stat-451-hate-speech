@@ -32,13 +32,13 @@ pip install -r requirements.txt
 ## Getting the data
 
 **CAD (training data).** Download from Zenodo: https://zenodo.org/records/4881008.
-Put `cad_v1_1_train.tsv`, `cad_v1_1_dev.tsv`, and `cad_v1_1_test.tsv` in `data/raw/cad/`, then check it loads:
+Put `cad_v1_1_train.tsv`, `cad_v1_1_dev.tsv`, and `cad_v1_1_test.tsv` in `data/raw/cad/`, then check it loads. (CAD names its validation split `dev`. Our code calls it `validation`.)
 
 ```bash
 python src/load_cad.py
 ```
 
-This prints the number and share of `neutral`, `person`, and `group` entries in each split.
+This prints the number and share of `neutral`, `person`, and `group` entries in each split (train, validation, test).
 
 **Reddit comments (application data).** Sampled from the Arctic Shift API (https://github.com/ArthurHeitmann/arctic_shift):
 

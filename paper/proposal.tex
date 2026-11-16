@@ -18,7 +18,6 @@
 
 \date{}
 
-% TODO: fill in group members
 \author{
   Grant Hohol, Mia Teng, Drew Barkman, JT Vespalec, Wesley Erpelding \\
   Department of Statistics, University of Wisconsin--Madison \\
@@ -45,7 +44,7 @@ On the other hand, in a study by \citet{chiril2022}, a multifaceted approach was
 
 Throughout the last decade, hate speech detection research has become much more prominent, but it is still riddled with limitations.
 These include, but are not limited to, context-dependency, bias, and multilingualism \citep{gandhi2024}.
-In an attempt to address the first of these limitations, context-dependency, as well as design a model that accurately predicts whether or not speech is classified as `hate speech', we will use a multifaceted approach, similar to the study conducted by Chiril et al., distinguishing abuse by its target rather than using a single binary label, and training on labels assigned with the surrounding conversation in view.
+In an attempt to address the first of these limitations, context-dependency, as well as design a model that accurately predicts whether or not speech is classified as `hate speech', we will use a multifaceted approach, similar to the study conducted by \citet{chiril2022}, distinguishing abuse by its target rather than using a single binary label, and training on labels assigned with the surrounding conversation in view.
 
 Whether the amount of hate speech has in fact increased is itself an empirical question.
 We apply our classifier to Reddit comments from 2015 to 2024 to answer two questions.
@@ -59,10 +58,10 @@ Second, has it grown more in political subreddits than in non-political ones?
 Comments are lowercased, URLs and usernames are replaced with placeholder tokens, and each comment is represented with TF--IDF features over word $n$-grams.
 We compare three linear classifiers covered in the course: multinomial naive Bayes, a generative baseline that models word frequencies within each class; multinomial (softmax) logistic regression with $L_2$ regularization, which models class probabilities directly; and a linear support vector machine, which finds the maximum-margin separating hyperplane.
 Logistic regression and the SVM use class weights to offset class imbalance.
-Hyperparameters (regularization strength, smoothing, $n$-gram range) are tuned on the dataset's development split, and each model is evaluated once on the held-out test split.
+Hyperparameters (regularization strength, smoothing, $n$-gram range) are tuned on the dataset's validation split, and each model is evaluated once on the held-out test split.
 Because group-directed abuse is the minority class of interest, we report per-class precision, recall, and F1, macro-F1, and confusion matrices rather than accuracy.
 
-\paragraph{Measuring prevalence.} We apply the best model, chosen by development-set macro-F1, to a large sample of Reddit comments and compute, for each subreddit and month, the share $\hat q$ flagged as group-directed abuse.
+\paragraph{Measuring prevalence.} We apply the best model, chosen by validation-set macro-F1, to a large sample of Reddit comments and compute, for each subreddit and month, the share $\hat q$ flagged as group-directed abuse.
 This raw share is biased: the training data over-represents abuse, and the classifier makes errors.
 We therefore use adjusted classify-and-count \citep{forman2008}.
 Let $p$ be the true share of comments that are group-directed abuse, the true positive rate $\mathrm{TPR} = P(\text{flagged} \mid \text{abusive})$ be the fraction of abusive comments the model catches, and the false positive rate $\mathrm{FPR} = P(\text{flagged} \mid \text{not abusive})$ be the fraction of other comments it wrongly flags.
@@ -75,6 +74,8 @@ clipped to $[0,1]$.
 The numerator removes the expected false alarms, and the denominator rescales for abusive comments the model misses.
 Because TPR and FPR are conditional on the true class, they do not depend on how common abuse is, so this correction holds even though abuse is far rarer on Reddit than in the training data.
 We estimate both rates on a hand-labeled sample of about 300 Reddit comments drawn across subreddits and years, stratified by the model's prediction so that flagged comments are well represented.
+Because flagged comments are over-sampled, a plain average over the labeled comments would overstate the TPR.
+We therefore weight each labeled comment by the number of application comments it represents, that is, by the size of its stratum in the full sample divided by the number labeled from that stratum.
 Error rates that stay stable over time cancel out of differences, so we treat changes over time, rather than absolute levels, as our primary result.
 
 \paragraph{Trend comparison.} We average monthly prevalence within a political group and a control group (Section~\ref{sec:data}) and fit
@@ -83,7 +84,10 @@ Error rates that stay stable over time cancel out of differences, so we treat ch
 \]
 where $t$ is time and $\mathrm{Pol}_g$ indicates the political group.
 The political trend is $\beta_1 + \beta_3$ (question 1), and $\beta_3$ measures how much faster abuse grew in political subreddits than in control subreddits (question 2).
-We form 95\% confidence intervals by bootstrapping: we resample comments within each subreddit-month and refit.
+We form 95\% confidence intervals by bootstrapping.
+Comments within one time window are consecutive and often share threads, so they are not independent, and we resample whole windows within each subreddit-month rather than individual comments.
+In each replicate we also resample the hand-labeled comments within their strata and re-estimate the TPR and FPR, so that uncertainty from the small labeled sample carries into the intervals.
+We then recompute monthly prevalence and refit the model.
 
 % ---------------------------------------------------------------
 \section{Dataset}
@@ -92,7 +96,7 @@ We form 95\% confidence intervals by bootstrapping: we resample comments within 
 \paragraph{Training: Contextual Abuse Dataset (CAD).} CAD \citep{vidgen2021} contains 26,550 Reddit entries (posts and comments) collected between February and July 2019 from 16 subreddits chosen for above-average abuse.
 Annotators saw each entry in the context of its thread.
 Primary labels are neutral (79.8\%), identity-directed abuse (9.9\%), affiliation-directed abuse (5.0\%), person-directed abuse (4.0\%), counter speech (0.8\%), and non-hateful slurs (0.5\%).
-After the authors' cleaning, 23,417 entries are split into train, development, and test sets, with each thread kept within one split.
+After the authors' cleaning, 23,417 entries are split into train, validation, and test sets, with each thread kept within one split.
 Under our mapping, about 15\% of entries are group-directed abuse.
 CAD is well suited to this project because it comes from the same platform we analyze and distinguishes abuse by target.
 It is released under CC BY 4.0.
@@ -114,9 +118,22 @@ We use the data for research only and will not redistribute raw comments.
 % ---------------------------------------------------------------
 \section{Expected Outcomes}
 
+We expect three results.
+First, a comparison of naive Bayes, logistic regression, and the linear SVM on the CAD test split, reported as per-class precision, recall, and F1, macro-F1, and confusion matrices.
+We expect group-directed abuse to be harder to detect than neutral text and person-directed abuse to be the hardest class, since it is the smallest.
+Second, monthly estimates of group-directed abuse prevalence for each of the seven subreddits from 2015 to 2024, corrected with adjusted classify-and-count and shown with bootstrap intervals.
+Third, estimates of the political trend $\beta_1 + \beta_3$ and the difference in trends $\beta_3$, which answer our two research questions.
+Because a linear model trained on 2019 text may transfer imperfectly to other years and subreddits, we will also report the TPR and FPR estimated on the hand-labeled Reddit sample, so readers can judge how much the correction matters.
 
 % ---------------------------------------------------------------
 \section{Resources}
+
+Both datasets are free and public.
+CAD is downloaded from Zenodo, and Reddit comments are sampled from the Arctic Shift API with a script in our repository that pauses between requests to respect the free service.
+Sampling one subreddit takes about 12,000 requests, or two to three hours, and the seven subreddits are split across group members.
+All models use scikit-learn \citep{pedregosa2011} and run on our laptops, since TF--IDF features and linear classifiers need no GPU.
+Hand-labeling about 300 comments is shared across the group.
+Code and the paper source are kept in a shared GitHub repository.
 
 
 \bibliographystyle{plainnat}
