@@ -12,6 +12,8 @@ Stat 451 group project. We train classifiers on the Contextual Abuse Dataset (CA
 │       └── reddit/        # sampled comments, one Parquet per subreddit-month
 ├── src/
 │   ├── load_cad.py        # load CAD + map labels to our 3 classes
+│   ├── preprocess.py      # clean_text() and load_clean_cad()
+│   ├── evaluate.py        # shared evaluate(): per class P/R/F1, macro F1, confusion matrix
 │   └── sample_reddit.py   # sample comments per subreddit-month from Arctic Shift
 ├── notebooks/             # exploration and analysis
 ├── paper/                 # LaTeX source (arXiv template)
@@ -39,6 +41,25 @@ python src/load_cad.py
 ```
 
 This prints the number and share of `neutral`, `person`, and `group` entries in each split (train, validation, test).
+
+To use CAD in a model, load the cleaned splits and report with the shared `evaluate()` (from a notebook in `notebooks/`):
+
+```python
+import sys
+sys.path.append("../src")
+
+from preprocess import load_clean_cad
+from evaluate import evaluate
+
+data = load_clean_cad()   # {"train": df, "validation": df, "test": df}
+train, validation = data["train"], data["validation"]
+
+# pipe = Pipeline([("tfidf", TfidfVectorizer(...)), ("clf", YourModel())])
+pipe.fit(train["text_clean"], train["label"])
+evaluate(pipe, validation["text_clean"], validation["label"], name="My model")
+```
+
+Use `text_clean` as X and `label` (`neutral`, `person`, `group`) as y. Tune on validation only and leave test alone until we pick the final model. Run `python src/preprocess.py` to see what the cleaning does.
 
 **Reddit comments (application data).** Sampled from the Arctic Shift API (https://github.com/ArthurHeitmann/arctic_shift):
 
